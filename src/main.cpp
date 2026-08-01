@@ -15,7 +15,7 @@ String password = "";
 IPAddress local_IP(192, 168, 0, 199); // Adres ESP
 IPAddress gateway(192, 168, 0, 1);    // Brama (router)
 IPAddress subnet(255, 255, 255, 0);   // Maska
-IPAddress primaryDNS(8, 8, 8, 8); // Serwer DNS od Google
+IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google
 
 // --- KONFIGURACJA PUSHOVER ---
 String pushoverApiToken = "";
@@ -40,6 +40,7 @@ IPAddress ips[6] = {
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String status = "  ";
+String wifiStatus = "";
 
 ESP8266WebServer server(80);
 
@@ -282,7 +283,7 @@ void setup()
         {
             // Ktoś się podłączył! Trwale wyłączamy odliczanie.
             timerActive = false;
-            updateOLED("TRYB KONFIGURACJI", "Polaczono z WiFi!", "Wejdz na adres:", WiFi.softAPIP().toString(), "Czekam na zapis...", "", "", "");
+            updateOLED("TRYB KONFIGURACJI", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Wejdz na adres:", WiFi.softAPIP().toString(), "Czekam na zapis...", "");
         }
         else if (timerActive)
         {
@@ -291,7 +292,7 @@ void setup()
 
             if (secondsLeft != lastSecondsLeft)
             {
-                updateOLED("TRYB KONFIGURACJI", "AP: " + String(apName), "Oczekuje na klienta", "Start za: " + String(secondsLeft) + "s", "", "", "", "");
+                updateOLED("TRYB KONFIGURACJI", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Oczekuje na klienta", "Start za: " + String(secondsLeft) + "s", "", "");
                 lastSecondsLeft = secondsLeft;
             }
 
@@ -302,13 +303,8 @@ void setup()
             }
         }
         else
-        {
-            // Licznik wyłączony, ale klient chwilowo się rozłączył (np. zgasł ekran telefonu)
-            // Czekamy na niego cierpliwie w nieskończoność
-            updateOLED("TRYB KONFIGURACJI", "Chwilowy brak", "polaczenia z WiFi", "Nadal czekam na zapis", "", "", "", "");
-        }
 
-        yield(); // Pozwala ESP "odetchnąć"
+            yield(); // Pozwala ESP "odetchnąć"
     }
 
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS))
@@ -321,7 +317,6 @@ void setup()
     Serial.print(pushoverApiToken);
     Serial.print(pushoverUserKey);
     Serial.print(serverJson);
-
 
     WiFi.begin(ssid.c_str(), password.c_str());
     Serial.print("\nŁączenie z WiFi");
@@ -339,59 +334,87 @@ void setup()
     sendPushover("Witaj! To jest testowa wiadomość z ESP8266.");
     sendJson("addInfo", 666, "String type", "String requestID");
 
-    updateOLED("watchdog v0.1", "\x10 IP: ", WiFi.localIP().toString(), "\x07 RSSI: ", String(WiFi.RSSI()), ssid, "", "");
+    updateOLED("ESP8266", "watchdog v0.2", "\x10", "", "\x07", "", "", "");
 }
 
 void loop()
 {
     for (int x = 0; x < 6; x++)
     {
-        oledBuffer[x] = "\x10  | " + ips[x].toString();
-        updateOLED("SSID: " + String(ssid), WiFi.localIP().toString() + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-
-        bool ret = Ping.ping(ips[x]);
-        if (ret == 0)
+        switch (WiFi.status())
         {
-            if (pingFailCounter[x] < 10)
+        case WL_CONNECTED:
+            wifiStatus = "CONNECTED";
+            break;
+
+        case WL_NO_SSID_AVAIL:
+            wifiStatus = "NO SSID";
+            break;
+
+        case WL_CONNECT_FAILED:
+            wifiStatus = "CONN FAILED";
+            break;
+
+        case WL_CONNECTION_LOST:
+            wifiStatus = "CONN LOST";
+            break;
+
+        case WL_DISCONNECTED:
+            wifiStatus = "DISCONN";
+            break;
+
+        default:
+            Serial.println(WiFi.status());
+        }
+
+        oledBuffer[x] = "\x10  | " + ips[x].toString();
+        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+        if (ips[x] != IPAddress(0, 0, 0, 0))
+        {
+            bool ret = Ping.ping(ips[x]);
+            if (ret == 0)
             {
-                pingFailCounter[x]++;
-            }
-            else if (pingFailCounter[x] == 10)
-            {
-                sendPushover(ips[x].toString() + " connection error!");
-                pingFailCounter[x]++;
+                if (pingFailCounter[x] < 99)
+                {
+                    pingFailCounter[x]++;
+                }
+                if (pingFailCounter[x] == 5 || pingFailCounter[x] == 50 || pingFailCounter[x] == 99)
+                {
+                    sendPushover(ips[x].toString() + " - connection error! Attempt: " + pingFailCounter[x]);
+                    pingFailCounter[x]++;
+                }
             }
             else
             {
+                if (pingFailCounter[x] != 0)
+                {
+                    sendPushover(ips[x].toString() + " - back online");
+                }
+                pingFailCounter[x] = 0;
             }
+
+            if (pingFailCounter[x] == 0)
+            {
+                status = "OK ";
+            }
+            else if (pingFailCounter[x] == 99)
+            {
+                status = "OFF";
+            }
+            else
+            {
+                status = String(pingFailCounter[x]);
+                while (status.length() < 3)
+                {
+                    status = status + " ";
+                }
+            }
+            oledBuffer[x] = status + "| " + ips[x].toString();
         }
         else
         {
-            if (pingFailCounter[x] != 0)
-            {
-                sendPushover(ips[x].toString() + " back online");
-            }
-            pingFailCounter[x] = 0;
+            oledBuffer[x] = "-  | IP not set";
         }
-
-        if (pingFailCounter[x] == 0)
-        {
-            status = "OK ";
-        }
-        else if (pingFailCounter[x] == 11)
-        {
-            status = "OFF";
-        }
-        else
-        {
-            status = String(pingFailCounter[x]);
-            while (status.length() < 3)
-            {
-                status = status + " ";
-            }
-        }
-
-        oledBuffer[x] = status + "| " + ips[x].toString();
     }
     delay(100);
 }

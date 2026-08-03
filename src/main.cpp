@@ -30,12 +30,20 @@ String serverJson = "";
 
 // --- Adresy do skanowania ---
 IPAddress ips[6] = {
-    IPAddress(192, 168, 0, 242),
-    IPAddress(192, 168, 0, 184),
-    IPAddress(192, 168, 0, 185),
-    IPAddress(192, 168, 0, 245),
-    IPAddress(192, 168, 0, 246),
+    IPAddress(0, 0, 0, 0),
+    IPAddress(0, 0, 0, 0),
+    IPAddress(0, 0, 0, 0),
+    IPAddress(0, 0, 0, 0),
+    IPAddress(0, 0, 0, 0),
     IPAddress(0, 0, 0, 0)};
+
+String ipsName[6] = {
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""};
 
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
@@ -85,13 +93,22 @@ void loadConfiguration()
 
     for (int i = 0; i < 6; i++)
     {
+        ips[i] = IPAddress(0, 0, 0, 0);
+        ipsName[i] = "-";
         line = f.readStringUntil('\n');
         line.trim();
 
         if (line.length() > 0)
-            stringToIP(line, ips[i]);
-        else
-            ips[i] = IPAddress(0, 0, 0, 0);
+        {
+
+            int separator = line.indexOf(';');
+
+            if (separator > 0)
+            {
+                stringToIP(line.substring(0, separator), ips[i]);
+                ipsName[i] = line.substring(separator + 1);
+            }
+        }
     }
 
     f.close();
@@ -158,45 +175,45 @@ serverJson:<br>
 
     html += R"rawliteral("><br><br>
 
-IP1:<br>
+IP1;Name:<br>
 <input name="ip1" value=")rawliteral";
 
-    html += ips[0].toString();
+    html += ips[0].toString() + ";" + ipsName[0];
 
     html += R"rawliteral("><br><br>
 
-IP2:<br>
+IP2;Name:<br>
 <input name="ip2" value=")rawliteral";
 
-    html += ips[1].toString();
+    html += ips[1].toString() + ";" + ipsName[1];
 
     html += R"rawliteral("><br><br>
 
-IP3:<br>
+IP3;Name:<br>
 <input name="ip3" value=")rawliteral";
 
-    html += ips[2].toString();
+    html += ips[2].toString() + ";" + ipsName[2];
 
     html += R"rawliteral("><br><br>
 
-IP4:<br>
+IP4;Name:<br>
 <input name="ip4" value=")rawliteral";
 
-    html += ips[3].toString();
+    html += ips[3].toString() + ";" + ipsName[3];
 
     html += R"rawliteral("><br><br>
 
-IP5:<br>
+IP5;Name:<br>
 <input name="ip5" value=")rawliteral";
 
-    html += ips[4].toString();
+    html += ips[4].toString() + ";" + ipsName[4];
 
     html += R"rawliteral("><br><br>
 
-IP6:<br>
+IP6;Name:<br>
 <input name="ip6" value=")rawliteral";
 
-    html += ips[5].toString();
+    html += ips[5].toString() + ";" + ipsName[5];
 
     html += R"rawliteral("><br><br>
 
@@ -366,9 +383,14 @@ void loop()
         default:
             Serial.println(WiFi.status());
         }
+        oledBuffer[x] = "\x10  | " + ipsName[x];
+        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+
+        delay(2000);
 
         oledBuffer[x] = "\x10  | " + ips[x].toString();
         updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+
         if (ips[x] != IPAddress(0, 0, 0, 0))
         {
             bool ret = Ping.ping(ips[x]);
@@ -409,11 +431,11 @@ void loop()
                     status = status + " ";
                 }
             }
-            oledBuffer[x] = status + "| " + ips[x].toString();
+            oledBuffer[x] = status + "| " + ipsName[x];
         }
         else
         {
-            oledBuffer[x] = "-  | IP not set";
+            oledBuffer[x] = "-  | -";
         }
     }
     delay(100);

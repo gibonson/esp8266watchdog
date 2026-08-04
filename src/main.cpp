@@ -321,8 +321,9 @@ void setup()
         }
         else
 
-            yield(); // Pozwala ESP "odetchnąć"
+            yield();
     }
+    server.stop();
 
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS))
     {
@@ -399,18 +400,17 @@ void loop()
                 if (pingFailCounter[x] < 99)
                 {
                     pingFailCounter[x]++;
-                }
-                if (pingFailCounter[x] == 5 || pingFailCounter[x] == 50 || pingFailCounter[x] == 99)
-                {
-                    sendPushover(ips[x].toString() + " - connection error! Attempt: " + pingFailCounter[x]);
-                    pingFailCounter[x]++;
+                    if (pingFailCounter[x] == 5 || pingFailCounter[x] == 50 || pingFailCounter[x] == 99)
+                    {
+                        sendPushover(ipsName[x] + " - " + ips[x].toString() + " - connection error! Attempt: " + pingFailCounter[x]);
+                    }
                 }
             }
             else
             {
-                if (pingFailCounter[x] != 0)
+                if (pingFailCounter[x] >= 5)
                 {
-                    sendPushover(ips[x].toString() + " - back online");
+                    sendPushover(ipsName[x] + " - " + ips[x].toString() + " - back online!");
                 }
                 pingFailCounter[x] = 0;
             }

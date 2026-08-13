@@ -205,45 +205,45 @@ serverJson:<br>
 
     html += R"rawliteral("><br><br>
 
-IP1;Name:<br>
+IP1:port;Name:<br>
 <input name="ip1" value=")rawliteral";
 
-    html += ips[0].toString() + ";" + ipsName[0];
+    html += ips[0].toString() + ":" + ipsPort[0] + ";" + ipsName[0];
 
     html += R"rawliteral("><br><br>
 
-IP2;Name:<br>
+IP2:port;Name:<br>
 <input name="ip2" value=")rawliteral";
 
-    html += ips[1].toString() + ";" + ipsName[1];
+    html += ips[1].toString() + ":" + ipsPort[1] + ";" + ipsName[1];
 
     html += R"rawliteral("><br><br>
 
-IP3;Name:<br>
+IP3:port;Name:<br>
 <input name="ip3" value=")rawliteral";
 
-    html += ips[2].toString() + ";" + ipsName[2];
+    html += ips[2].toString() + ":" + ipsPort[2] + ";" + ipsName[2];
 
     html += R"rawliteral("><br><br>
 
-IP4;Name:<br>
+IP4:port;Name:<br>
 <input name="ip4" value=")rawliteral";
 
-    html += ips[3].toString() + ";" + ipsName[3];
+    html += ips[3].toString() + ":" + ipsPort[3] + ";" + ipsName[3];
 
     html += R"rawliteral("><br><br>
 
-IP5;Name:<br>
+IP5:port;Name:<br>
 <input name="ip5" value=")rawliteral";
 
-    html += ips[4].toString() + ";" + ipsName[4];
+    html += ips[4].toString() + ":" + ipsPort[4] + ";" + ipsName[4];
 
     html += R"rawliteral("><br><br>
 
-IP6;Name:<br>
+IP6:port;Name:<br>
 <input name="ip6" value=")rawliteral";
 
-    html += ips[5].toString() + ";" + ipsName[5];
+    html += ips[5].toString() + ":" + ipsPort[5] + ";" + ipsName[5];
 
     html += R"rawliteral("><br><br>
 

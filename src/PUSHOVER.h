@@ -8,7 +8,7 @@ void sendPushover(String message)
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
     // 1. Kodujemy tytuł (zastępujemy spacje ręcznie)
-    String encodedTitle = "ESP8266%20-%20watchdog v0.2";
+    String encodedTitle = ssid + "%20-%20ESP8266%20-%20" + deviceName;
 
     // 2. Proste kodowanie wiadomości (zamiana spacji na %20 i nowej linii na %0A)
     String encodedMessage = message;

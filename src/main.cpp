@@ -9,6 +9,9 @@
 
 #include <ESP8266WebServer.h>
 
+String deviceName = "WatchDog v0.3";
+
+
 // --- KONFIGURACJA WI-FI ---
 String ssid = "";
 String password = "";
@@ -28,6 +31,7 @@ String serverJson = "";
 
 #include "JSON.h"
 
+
 // --- Adresy do skanowania ---
 IPAddress ips[6] = {
     IPAddress(0, 0, 0, 0),
@@ -36,6 +40,14 @@ IPAddress ips[6] = {
     IPAddress(0, 0, 0, 0),
     IPAddress(0, 0, 0, 0),
     IPAddress(0, 0, 0, 0)};
+
+String ipsPort[6] = {
+    "",
+    "",
+    "",
+    "",
+    "",
+    ""};
 
 String ipsName[6] = {
     "",
@@ -94,19 +106,37 @@ void loadConfiguration()
     for (int i = 0; i < 6; i++)
     {
         ips[i] = IPAddress(0, 0, 0, 0);
+        ipsPort[i] = "";
         ipsName[i] = "-";
         line = f.readStringUntil('\n');
         line.trim();
 
         if (line.length() > 0)
         {
+            int separatorName = line.indexOf(';');
 
-            int separator = line.indexOf(';');
+            String address;
 
-            if (separator > 0)
+            if (separatorName > 0)
             {
-                stringToIP(line.substring(0, separator), ips[i]);
-                ipsName[i] = line.substring(separator + 1);
+                address = line.substring(0, separatorName);
+                ipsName[i] = line.substring(separatorName + 1);
+            }
+            else
+            {
+                address = line;
+            }
+
+            int separatorPort = address.indexOf(':');
+
+            if (separatorPort > 0)
+            {
+                stringToIP(address.substring(0, separatorPort), ips[i]);
+                ipsPort[i] = address.substring(separatorPort + 1);
+            }
+            else
+            {
+                stringToIP(address, ips[i]);
             }
         }
     }
@@ -279,7 +309,8 @@ void setup()
 {
     Serial.begin(115200);
     initOLED();
-    updateOLED("watchdog v0.1", "\x10 IP: ", "", "\x07 RSSI: ", "", "", "", "");
+    updateOLED(deviceName, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
+    delay(1000);
 
     LittleFS.begin();
     loadConfiguration();
@@ -349,10 +380,10 @@ void setup()
     Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
     Serial.println("RSSI: " + String(WiFi.RSSI()));
 
-    sendPushover("Witaj! To jest testowa wiadomość z ESP8266.");
+    sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
     sendJson("addInfo", 666, "String type", "String requestID");
 
-    updateOLED("ESP8266", "watchdog v0.2", "\x10", "", "\x07", "", "", "");
+    updateOLED("ESP8266", "watchdog v0.3", "\x10", "", "\x07", "", "", "");
 }
 
 void loop()
@@ -388,14 +419,33 @@ void loop()
         updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
 
         delay(2000);
+        if (ipsPort[x] == "")
+        {
+            oledBuffer[x] = "\x10  |" + ips[x].toString();
+        }
+        else
+        {
+            String adresPort = ips[x].toString() + ":" + ipsPort[x];
 
-        oledBuffer[x] = "\x10  | " + ips[x].toString();
+            oledBuffer[x] = "\x10  |" + adresPort.substring(0, 16);
+        }
         updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-
+        delay(2000);
         if (ips[x] != IPAddress(0, 0, 0, 0))
         {
-            bool ret = Ping.ping(ips[x]);
-            if (ret == 0)
+            bool ret = false;
+            if (ipsPort[x] == "")
+            {
+                ret = Ping.ping(ips[x]);
+            }
+            else
+            {
+                WiFiClient client;
+                ret = client.connect(ips[x], ipsPort[x].toInt());
+                client.stop();
+            }
+
+            if (ret == false)
             {
                 if (pingFailCounter[x] < 99)
                 {

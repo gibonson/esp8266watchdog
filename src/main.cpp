@@ -11,7 +11,6 @@
 
 String deviceName = "WatchDog v0.3";
 
-
 // --- KONFIGURACJA WI-FI ---
 String ssid = "";
 String password = "";
@@ -30,7 +29,6 @@ String serverJson = "";
 // String serverJson = "http://192.168.0.242:5000/api/addEvent";
 
 #include "JSON.h"
-
 
 // --- Adresy do skanowania ---
 IPAddress ips[6] = {
@@ -310,7 +308,7 @@ void setup()
     Serial.begin(115200);
     initOLED();
     updateOLED(deviceName, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
-    delay(1000);
+    delay(3000);
 
     LittleFS.begin();
     loadConfiguration();
@@ -355,6 +353,8 @@ void setup()
             yield();
     }
     server.stop();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA); // wifi - client mode
 
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS))
     {
@@ -368,12 +368,22 @@ void setup()
     Serial.print(serverJson);
 
     WiFi.begin(ssid.c_str(), password.c_str());
-    Serial.print("\nŁączenie z WiFi");
+    Serial.print("\nConnecting to Wi-Fi");
+
+    int wifiTimeout = 0; // timeout counter
 
     while (WiFi.status() != WL_CONNECTED)
     {
         delay(500);
         Serial.print(".");
+        wifiTimeout++;
+
+        // Jeśli minęło 30 prób (30 * 500ms = 15 sekund)
+        if (wifiTimeout > 30)
+        {
+            Serial.println("\nNie udalo sie polaczyc z WiFi (Timeout). Restart urzadzenia...");
+            ESP.restart(); // Wymuszony reset sprzętowy
+        }
     }
 
     Serial.println("\nPołączono z siecią WiFi!");

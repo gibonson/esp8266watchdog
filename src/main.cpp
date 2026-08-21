@@ -1,17 +1,18 @@
-#include "OLED.h"
-
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266Ping.h>
 #include <LittleFS.h>
-
 #include <ESP8266WebServer.h>
+
+#include "OLED.h"
+#include "JSON.h"
+#include "PUSHOVER.h"
 
 String deviceName = "WatchDog v0.3";
 
-// --- KONFIGURACJA WI-FI ---
+// --- WI-FI Configuration---
 String ssid = "";
 String password = "";
 IPAddress local_IP(192, 168, 0, 199); // Adres ESP
@@ -19,18 +20,14 @@ IPAddress gateway(192, 168, 0, 1);    // Brama (router)
 IPAddress subnet(255, 255, 255, 0);   // Maska
 IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google
 
-// --- KONFIGURACJA PUSHOVER ---
+// --- PUSHOVER Configuration---
 String pushoverApiToken = "";
 String pushoverUserKey = "";
 
-#include "PUSHOVER.h"
-
+// --- JSON Configuration---
 String serverJson = "";
-// String serverJson = "http://192.168.0.242:5000/api/addEvent";
 
-#include "JSON.h"
-
-// --- Adresy do skanowania ---
+// --- Addresses to check ---
 IPAddress ips[6] = {
     IPAddress(0, 0, 0, 0),
     IPAddress(0, 0, 0, 0),
@@ -390,8 +387,12 @@ void setup()
     Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
     Serial.println("RSSI: " + String(WiFi.RSSI()));
 
+
+    initPushover(pushoverApiToken, pushoverUserKey, deviceName);
     sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
-    sendJson("addInfo", 666, "String type", "String requestID");
+    
+    initJson(serverJson, deviceName);
+    sendJson("String addInfo", 666, "String type", "String requestID");
 
     updateOLED("ESP8266", "watchdog v0.3", "\x10", "", "\x07", "", "", "");
 }

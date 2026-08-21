@@ -1,3 +1,25 @@
+#ifndef PUSHOVER_H
+#define PUSHOVER_H
+
+String _pushoverToken = "";
+String _pushoverUser = "";
+String _pushoverDeviceName = "";
+
+void initPushover(String apiToken, String userKey, String deviceName)
+{
+    _pushoverToken = apiToken;
+    _pushoverUser = userKey;
+    _pushoverDeviceName = deviceName;
+}
+
+String encodeString(String str)
+{
+    String encodedString = str;
+    encodedString.replace(" ", "%20");
+    encodedString.replace("\n", "%0A");
+    return encodedString;
+}
+
 void sendPushover(String message)
 {
     WiFiClientSecure client;
@@ -7,36 +29,28 @@ void sendPushover(String message)
     http.begin(client, "https://api.pushover.net/1/messages.json");
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
-    // 1. Kodujemy tytuł (zastępujemy spacje ręcznie)
-    String encodedTitle = ssid + "%20-%20ESP8266%20-%20" + deviceName;
+    String title = WiFi.SSID() + " - " + _pushoverDeviceName;
 
-    // 2. Proste kodowanie wiadomości (zamiana spacji na %20 i nowej linii na %0A)
-    String encodedMessage = message;
-    encodedMessage.replace(" ", "%20");
-    encodedMessage.replace("\n", "%0A");
+    String httpRequestData = "token=" + _pushoverToken +
+                             "&user=" + _pushoverUser +
+                             "&title=" + encodeString(title) +
+                             "&message=" + encodeString(message);
 
-    // 3. Budujemy poprawne zapytanie
-    String httpRequestData = "token=" + pushoverApiToken +
-                             "&user=" + pushoverUserKey +
-                             "&title=" + encodedTitle +
-                             "&message=" + encodedMessage;
-
-    Serial.println(httpRequestData);
-    Serial.println("Wysyłanie powiadomienia...");
+    Serial.println("Sending a notification...");
 
     int httpResponseCode = http.POST(httpRequestData);
 
     if (httpResponseCode > 0)
     {
-        Serial.print("Sukces! Kod odpowiedzi HTTP: ");
+        Serial.print("Success! response code: ");
         Serial.println(httpResponseCode);
-        String payload = http.getString();
-        Serial.println("Odpowiedź serwera: " + payload);
     }
     else
     {
-        Serial.print("Błąd wysyłania. Kod błędu: ");
+        Serial.print("Sending error! response code: ");
         Serial.println(httpResponseCode);
     }
     http.end();
 }
+
+#endif // PUSHOVER_H

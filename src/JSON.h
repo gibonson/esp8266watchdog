@@ -1,15 +1,29 @@
+#ifndef JSON_H
+#define JSON_H
+
+String _jsonServerUrl = "";
+String _jsonDeviceName = "Watchdog";
+
+void initJson(String serverUrl, String deviceName)
+{
+    _jsonServerUrl = serverUrl;
+    _jsonDeviceName = deviceName;
+}
+
 void sendJson(String addInfo, int value, String type, String requestID = "")
 {
+    if (_jsonServerUrl == "")
+    {
+        Serial.println("No endpoint address");
+        return;
+    }
+
     WiFiClient client;
     HTTPClient http;
-    http.begin(client, serverJson);
+    http.begin(client, _jsonServerUrl);
     http.addHeader("Content-Type", "application/json");
-    String jsonString = "{\"deviceIP\":\"" +
-                        String(local_IP[0]) + "." +
-                        String(local_IP[1]) + "." +
-                        String(local_IP[2]) + "." +
-                        String(local_IP[3]) +
-                        "\",\"deviceName\":\"" + "dog" +
+    String jsonString = "{\"deviceIP\":\"" + WiFi.localIP().toString() +
+                        "\",\"deviceName\":\"" + _jsonDeviceName +
                         "\",\"requestID\":\"" + requestID +
                         "\",\"addInfo\":\"" + addInfo +
                         "\",\"type\":\"" + type +
@@ -17,10 +31,12 @@ void sendJson(String addInfo, int value, String type, String requestID = "")
     Serial.println("Json to sent: " + jsonString);
     if (http.POST(jsonString) == -1)
     {
-        Serial.println("Błąd wysyłania JSON-a: " + jsonString);
+        Serial.println("JSON sending error: " + jsonString);
     }
     else
     {
-        Serial.println("JSON wysłany pomyślnie: " + jsonString);
+        Serial.println("JSON sent successfully: " + jsonString);
     }
+    http.end();
 }
+#endif // JSON_H

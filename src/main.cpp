@@ -36,22 +36,8 @@ IPAddress ips[6] = {
     IPAddress(0, 0, 0, 0),
     IPAddress(0, 0, 0, 0)};
 
-String ipsPort[6] = {
-    "",
-    "",
-    "",
-    "",
-    "",
-    ""};
-
-String ipsName[6] = {
-    "",
-    "",
-    "",
-    "",
-    "",
-    ""};
-
+String ipsPort[6] = {"", "", "", "", "", ""};
+String ipsName[6] = {"", "", "", "", "", ""};
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String status = "  ";
@@ -59,7 +45,7 @@ String wifiStatus = "";
 
 ESP8266WebServer server(80);
 
-const char *apName = "ESP-Konfiguracja";
+const char *apName = "ESP-Configuration";
 const char *apPassword = "12345678";
 bool configSaved = false;
 
@@ -141,6 +127,19 @@ void loadConfiguration()
 
 void handleRoot()
 {
+    String configContent = "";
+    File f = LittleFS.open("/config.txt", "r");
+    if (f)
+    {
+        configContent = f.readString();
+        f.close();
+    }
+    else
+    {
+        // if no file create template
+        configContent = "Nazwa_WiFi\nHaslo_WiFi\n192.168.0.199\nUserKey_Pushover\nApiToken_Pushover\nhttp://192.168.0.242:5000/api/addEvent\n192.168.0.10;Serwer\n192.168.0.11;Kamera\n\n\n\n\n";
+    }
+
     String html = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -149,101 +148,32 @@ void handleRoot()
 <title>Konfiguracja ESP</title>
 <style>
 body { font-family: Arial; margin:40px; }
-input { width:350px; margin-bottom:10px; }
+textarea { width: 100%; max-width: 500px; font-family: monospace; white-space: pre; }
+.help-box { background-color: #f2f2f2; border-left: 4px solid #4CAF50; padding: 10px; margin-bottom: 20px; max-width: 480px; font-size: 13px; line-height: 1.4; }
 </style>
 </head>
 <body>
 
-<h2>Konfiguracja ESP</h2>
+<h2>Konfiguracja ESP (Raw Config)</h2>
+
+<div class="help-box">
+  <strong>File structure (each parameter on a new line):</strong><br>
+  1. SSID WiFi<br>
+  2. WiFi Password<br>
+  3. IP Address (np. 192.168.0.199)<br>
+  4. Pushover User Key<br>
+  5. Pushover API Token<br>
+  6. URL to JSON Server<br>
+  7-12. IP addresses to check (Format: <b>IP;Name</b>). Empty lines are allowed.
+</div>
 
 <form action="/save" method="POST">
+<textarea name="configRaw" rows="18">)rawliteral";
 
-SSID:<br>
-<input name="ssid" value=")rawliteral";
+    html += configContent;
 
-    html += ssid;
-
-    html += R"rawliteral("><br><br>
-
-Hasło:<br>
-<input name="password" value=")rawliteral";
-
-    html += password;
-
-    html += R"rawliteral("><br><br>
-
-IP ESP:<br>
-<input name="localIP" value=")rawliteral";
-
-    html += local_IP.toString();
-
-    html += R"rawliteral("><br><br>
-
-User Key:<br>
-<input name="userKey" value=")rawliteral";
-
-    html += pushoverUserKey;
-
-    html += R"rawliteral("><br><br>
-
-API Token:<br>
-<input name="apiToken" value=")rawliteral";
-
-    html += pushoverApiToken;
-
-    html += R"rawliteral("><br><br>
-
-serverJson:<br>
-<input name="serverJson" value=")rawliteral";
-
-    html += serverJson;
-
-    html += R"rawliteral("><br><br>
-
-IP1:port;Name:<br>
-<input name="ip1" value=")rawliteral";
-
-    html += ips[0].toString() + ":" + ipsPort[0] + ";" + ipsName[0];
-
-    html += R"rawliteral("><br><br>
-
-IP2:port;Name:<br>
-<input name="ip2" value=")rawliteral";
-
-    html += ips[1].toString() + ":" + ipsPort[1] + ";" + ipsName[1];
-
-    html += R"rawliteral("><br><br>
-
-IP3:port;Name:<br>
-<input name="ip3" value=")rawliteral";
-
-    html += ips[2].toString() + ":" + ipsPort[2] + ";" + ipsName[2];
-
-    html += R"rawliteral("><br><br>
-
-IP4:port;Name:<br>
-<input name="ip4" value=")rawliteral";
-
-    html += ips[3].toString() + ":" + ipsPort[3] + ";" + ipsName[3];
-
-    html += R"rawliteral("><br><br>
-
-IP5:port;Name:<br>
-<input name="ip5" value=")rawliteral";
-
-    html += ips[4].toString() + ":" + ipsPort[4] + ";" + ipsName[4];
-
-    html += R"rawliteral("><br><br>
-
-IP6:port;Name:<br>
-<input name="ip6" value=")rawliteral";
-
-    html += ips[5].toString() + ":" + ipsPort[5] + ";" + ipsName[5];
-
-    html += R"rawliteral("><br><br>
-
-<input type="submit" value="Zapisz">
-
+    html += R"rawliteral(</textarea><br><br>
+<input type="submit" value="Save and Reboot">
 </form>
 
 </body>
@@ -255,34 +185,28 @@ IP6:port;Name:<br>
 
 void handleSave()
 {
-    File f = LittleFS.open("/config.txt", "w");
-
-    if (!f)
+    // form checking fild "configRaw"
+    if (!server.hasArg("configRaw"))
     {
-        server.send(500, "text/plain", "Blad zapisu");
+        server.send(400, "text/plain", "No configuration data!");
         return;
     }
 
-    f.println(server.arg("ssid"));
-    f.println(server.arg("password"));
-    f.println(server.arg("localIP"));
-    f.println(server.arg("userKey"));
-    f.println(server.arg("apiToken"));
-    f.println(server.arg("serverJson"));
+    File f = LittleFS.open("/config.txt", "w");
+    if (!f)
+    {
+        server.send(500, "text/plain", "Error saving to flash memory");
+        return;
+    }
 
-    f.println(server.arg("ip1"));
-    f.println(server.arg("ip2"));
-    f.println(server.arg("ip3"));
-    f.println(server.arg("ip4"));
-    f.println(server.arg("ip5"));
-    f.println(server.arg("ip6"));
-
+    // save data from configRaw to config.txt
+    f.print(server.arg("configRaw"));
     f.close();
 
-    server.send(200, "text/html",
-                "<h2>Zapisano konfigurację.</h2>");
+    server.send(200, "text/html", "<h2>Configuration saved! ESP will reboot now.</h2>");
 
-    configSaved = true; // Zmieniamy flagę - to przerwie pętlę w setup()
+    delay(1000); // time to recieve 200
+    ESP.restart(); // hard reset
 }
 
 void startAP()
@@ -297,7 +221,7 @@ void startAP()
     server.on("/save", HTTP_POST, handleSave);
 
     server.begin();
-    updateOLED("TRYB KONFIGURACJI", "Polaczono z WiFi!", "Wejdz na adres:", WiFi.softAPIP().toString(), "Czekam na zapis...", "", "", "");
+    updateOLED("CONFIG MODE", "Connected!!","", "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config...", "", "");
 }
 
 void setup()
@@ -315,7 +239,7 @@ void setup()
     int lastSecondsLeft = -1;
     bool timerActive = true; // Flaga określająca, czy licznik jest włączony
 
-    // 3. Pętla trybu konfiguracji
+    // Configuration Mode
     while (!configSaved)
     {
         server.handleClient(); // Obsługa zapytań HTTP
@@ -326,7 +250,7 @@ void setup()
         {
             // Ktoś się podłączył! Trwale wyłączamy odliczanie.
             timerActive = false;
-            updateOLED("TRYB KONFIGURACJI", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Wejdz na adres:", WiFi.softAPIP().toString(), "Czekam na zapis...", "");
+            updateOLED("CONFIG MODE", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config", "");
         }
         else if (timerActive)
         {
@@ -335,13 +259,13 @@ void setup()
 
             if (secondsLeft != lastSecondsLeft)
             {
-                updateOLED("TRYB KONFIGURACJI", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Oczekuje na klienta", "Start za: " + String(secondsLeft) + "s", "", "");
+                updateOLED("CONFIG MODE", "", "AP: " + String(apName), "PASS: " + String(apPassword), "" ,"Waiting for client", "Starting in: " + String(secondsLeft) + "s", "");
                 lastSecondsLeft = secondsLeft;
             }
 
             if (secondsLeft <= 0)
             {
-                Serial.println("Brak klientow. Startuje normalnie.");
+                Serial.println("o clients. Starting normally.");
                 break; // Czas minął, wychodzimy z pętli i ruszamy z kodem dalej
             }
         }
@@ -378,19 +302,18 @@ void setup()
         // Jeśli minęło 30 prób (30 * 500ms = 15 sekund)
         if (wifiTimeout > 30)
         {
-            Serial.println("\nNie udalo sie polaczyc z WiFi (Timeout). Restart urzadzenia...");
-            ESP.restart(); // Wymuszony reset sprzętowy
+            Serial.println("\nWiFi connection failed (Timeout). Rebooting...");
+            ESP.restart(); // Hard reset
         }
     }
 
-    Serial.println("\nPołączono z siecią WiFi!");
+    Serial.println("\nWiFi Connected:");
     Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
     Serial.println("RSSI: " + String(WiFi.RSSI()));
 
-
     initPushover(pushoverApiToken, pushoverUserKey, deviceName);
     sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
-    
+
     initJson(serverJson, deviceName);
     sendJson("String addInfo", 666, "String type", "String requestID");
 

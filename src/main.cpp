@@ -1,14 +1,20 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <ESP8266Ping.h>
 #include <LittleFS.h>
-#include <ESP8266WebServer.h>
+#include <WiFiClientSecure.h>
 
-#include "OLED.h"
-#include "JSON.h"
-#include "PUSHOVER.h"
+// #include <ESP8266WiFi.h>
+// #include <ESP8266HTTPClient.h>
+// #include <ESP8266WebServer.h>
+
+#include "MODULE_OLED.h"
+
+#include "BOARD_WIFI.h"
+#include "BOARD_WEB_GUI.h"
+
+
+#include "BOARD_JSON.h"
+#include "BOARD_PUSHOVER.h"
 
 String deviceName = "WatchDog v0.3";
 
@@ -43,10 +49,14 @@ String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String status = "  ";
 String wifiStatus = "";
 
-ESP8266WebServer server(80);
+unsigned long previousMillis = 0; // Przechowuje czas ostatniej akcji
+int currentHostIndex = 0;         // Wskazuje, który z 6 hostów (0-5) aktualnie przetwarzamy
+int currentPhase = 0;             // Wskazuje krok (0 = pokaż nazwę, 1 = pokaż IP, 2 = pinguj)
+int countdownTimer = 0;           // Licznik koncowy
 
-const char *apName = "ESP-Configuration";
-const char *apPassword = "12345678";
+
+const char *accessPointName = "ESP-Configuration";
+const char *accessPointPassword = "12345678";
 bool configSaved = false;
 
 bool stringToIP(const String &str, IPAddress &ip)
@@ -125,107 +135,11 @@ void loadConfiguration()
     f.close();
 }
 
-void handleRoot()
-{
-    String configContent = "";
-    File f = LittleFS.open("/config.txt", "r");
-    if (f)
-    {
-        configContent = f.readString();
-        f.close();
-    }
-    else
-    {
-        // if no file create template
-        configContent = "Nazwa_WiFi\nHaslo_WiFi\n192.168.0.199\nUserKey_Pushover\nApiToken_Pushover\nhttp://192.168.0.242:5000/api/addEvent\n192.168.0.10;Serwer\n192.168.0.11;Kamera\n\n\n\n\n";
-    }
 
-    String html = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Konfiguracja ESP</title>
-<style>
-body { font-family: Arial; margin:40px; }
-textarea { width: 100%; max-width: 500px; font-family: monospace; white-space: pre; }
-.help-box { background-color: #f2f2f2; border-left: 4px solid #4CAF50; padding: 10px; margin-bottom: 20px; max-width: 480px; font-size: 13px; line-height: 1.4; }
-</style>
-</head>
-<body>
-
-<h2>Konfiguracja ESP (Raw Config)</h2>
-
-<div class="help-box">
-  <strong>File structure (each parameter on a new line):</strong><br>
-  1. SSID WiFi<br>
-  2. WiFi Password<br>
-  3. IP Address (np. 192.168.0.199)<br>
-  4. Pushover User Key<br>
-  5. Pushover API Token<br>
-  6. URL to JSON Server<br>
-  7-12. IP addresses to check (Format: <b>IP;Name</b>). Empty lines are allowed.
-</div>
-
-<form action="/save" method="POST">
-<textarea name="configRaw" rows="18">)rawliteral";
-
-    html += configContent;
-
-    html += R"rawliteral(</textarea><br><br>
-<input type="submit" value="Save and Reboot">
-</form>
-
-</body>
-</html>
-)rawliteral";
-
-    server.send(200, "text/html", html);
-}
-
-void handleSave()
-{
-    // form checking fild "configRaw"
-    if (!server.hasArg("configRaw"))
-    {
-        server.send(400, "text/plain", "No configuration data!");
-        return;
-    }
-
-    File f = LittleFS.open("/config.txt", "w");
-    if (!f)
-    {
-        server.send(500, "text/plain", "Error saving to flash memory");
-        return;
-    }
-
-    // save data from configRaw to config.txt
-    f.print(server.arg("configRaw"));
-    f.close();
-
-    server.send(200, "text/html", "<h2>Configuration saved! ESP will reboot now.</h2>");
-
-    delay(1000); // time to recieve 200
-    ESP.restart(); // hard reset
-}
-
-void startAP()
-{
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP(apName, apPassword);
-
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
-
-    server.on("/", HTTP_GET, handleRoot);
-    server.on("/save", HTTP_POST, handleSave);
-
-    server.begin();
-    updateOLED("CONFIG MODE", "Connected!!","", "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config...", "", "");
-}
 
 void setup()
 {
+
     Serial.begin(115200);
     initOLED();
     updateOLED(deviceName, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
@@ -233,7 +147,7 @@ void setup()
 
     LittleFS.begin();
     loadConfiguration();
-    startAP();
+    initAccessPoint(accessPointName, accessPointPassword);
 
     unsigned long apStartTime = millis();
     int lastSecondsLeft = -1;
@@ -250,7 +164,7 @@ void setup()
         {
             // Ktoś się podłączył! Trwale wyłączamy odliczanie.
             timerActive = false;
-            updateOLED("CONFIG MODE", "", "AP: " + String(apName), "PASS: " + String(apPassword), "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config", "");
+            updateOLED("CONFIG MODE", "", "AP: " + String(accessPointName), "PASS: " + String(accessPointPassword), "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config", "");
         }
         else if (timerActive)
         {
@@ -259,7 +173,7 @@ void setup()
 
             if (secondsLeft != lastSecondsLeft)
             {
-                updateOLED("CONFIG MODE", "", "AP: " + String(apName), "PASS: " + String(apPassword), "" ,"Waiting for client", "Starting in: " + String(secondsLeft) + "s", "");
+                updateOLED("CONFIG MODE", "", "AP: " + String(accessPointName), "PASS: " + String(accessPointPassword), "", "Waiting for client", "Starting in: " + String(secondsLeft) + "s", "");
                 lastSecondsLeft = secondsLeft;
             }
 
@@ -275,41 +189,8 @@ void setup()
     }
     server.stop();
     WiFi.softAPdisconnect(true);
-    WiFi.mode(WIFI_STA); // wifi - client mode
 
-    if (!WiFi.config(local_IP, gateway, subnet, primaryDNS))
-    {
-        Serial.println("IP configuration Error!!!");
-    }
-
-    Serial.print(ssid);
-    Serial.print(password);
-    Serial.print(pushoverApiToken);
-    Serial.print(pushoverUserKey);
-    Serial.print(serverJson);
-
-    WiFi.begin(ssid.c_str(), password.c_str());
-    Serial.print("\nConnecting to Wi-Fi");
-
-    int wifiTimeout = 0; // timeout counter
-
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(500);
-        Serial.print(".");
-        wifiTimeout++;
-
-        // Jeśli minęło 30 prób (30 * 500ms = 15 sekund)
-        if (wifiTimeout > 30)
-        {
-            Serial.println("\nWiFi connection failed (Timeout). Rebooting...");
-            ESP.restart(); // Hard reset
-        }
-    }
-
-    Serial.println("\nWiFi Connected:");
-    Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
-    Serial.println("RSSI: " + String(WiFi.RSSI()));
+    initWifiClient();
 
     initPushover(pushoverApiToken, pushoverUserKey, deviceName);
     sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
@@ -322,105 +203,164 @@ void setup()
 
 void loop()
 {
-    for (int x = 0; x < 6; x++)
+
+    unsigned long currentMillis = millis();
+
+    switch (WiFi.status())
     {
-        switch (WiFi.status())
+    case WL_CONNECTED:
+        wifiStatus = "CONNECTED";
+        break;
+    case WL_NO_SSID_AVAIL:
+        wifiStatus = "NO SSID";
+        break;
+    case WL_CONNECT_FAILED:
+        wifiStatus = "CONN FAILED";
+        break;
+    case WL_CONNECTION_LOST:
+        wifiStatus = "CONN LOST";
+        break;
+    case WL_DISCONNECTED:
+        wifiStatus = "DISCONN";
+        break;
+    default:
+        wifiStatus = "UNKNOWN";
+        break;
+    }
+    if (currentPhase == 0)
+    {
+        oledBuffer[currentHostIndex] = "\x10  | " + ipsName[currentHostIndex];
+        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                   oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+
+        previousMillis = currentMillis; // Zapisz czas
+        currentPhase = 1;               // Przejdź do Fazy 1
+    }
+
+    else if (currentPhase == 1)
+    {
+        // Sprawdzamy, czy minęło już 2000 ms od Fazy 0
+        if (currentMillis - previousMillis >= 2000)
         {
-        case WL_CONNECTED:
-            wifiStatus = "CONNECTED";
-            break;
-
-        case WL_NO_SSID_AVAIL:
-            wifiStatus = "NO SSID";
-            break;
-
-        case WL_CONNECT_FAILED:
-            wifiStatus = "CONN FAILED";
-            break;
-
-        case WL_CONNECTION_LOST:
-            wifiStatus = "CONN LOST";
-            break;
-
-        case WL_DISCONNECTED:
-            wifiStatus = "DISCONN";
-            break;
-
-        default:
-            Serial.println(WiFi.status());
-        }
-        oledBuffer[x] = "\x10  | " + ipsName[x];
-        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-
-        delay(2000);
-        if (ipsPort[x] == "")
-        {
-            oledBuffer[x] = "\x10  |" + ips[x].toString();
-        }
-        else
-        {
-            String adresPort = ips[x].toString() + ":" + ipsPort[x];
-
-            oledBuffer[x] = "\x10  |" + adresPort.substring(0, 16);
-        }
-        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()), oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-        delay(2000);
-        if (ips[x] != IPAddress(0, 0, 0, 0))
-        {
-            bool ret = false;
-            if (ipsPort[x] == "")
+            if (ipsPort[currentHostIndex] == "")
             {
-                ret = Ping.ping(ips[x]);
+                oledBuffer[currentHostIndex] = "\x10  |" + ips[currentHostIndex].toString();
             }
             else
             {
-                WiFiClient client;
-                ret = client.connect(ips[x], ipsPort[x].toInt());
-                client.stop();
+                String adresPort = ips[currentHostIndex].toString() + ":" + ipsPort[currentHostIndex];
+                oledBuffer[currentHostIndex] = "\x10  |" + adresPort.substring(0, 16);
             }
+            updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                       oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
 
-            if (ret == false)
-            {
-                if (pingFailCounter[x] < 99)
-                {
-                    pingFailCounter[x]++;
-                    if (pingFailCounter[x] == 5 || pingFailCounter[x] == 50 || pingFailCounter[x] == 99)
-                    {
-                        sendPushover(ipsName[x] + " - " + ips[x].toString() + " - connection error! Attempt: " + pingFailCounter[x]);
-                    }
-                }
-            }
-            else
-            {
-                if (pingFailCounter[x] >= 5)
-                {
-                    sendPushover(ipsName[x] + " - " + ips[x].toString() + " - back online!");
-                }
-                pingFailCounter[x] = 0;
-            }
-
-            if (pingFailCounter[x] == 0)
-            {
-                status = "OK ";
-            }
-            else if (pingFailCounter[x] == 99)
-            {
-                status = "OFF";
-            }
-            else
-            {
-                status = String(pingFailCounter[x]);
-                while (status.length() < 3)
-                {
-                    status = status + " ";
-                }
-            }
-            oledBuffer[x] = status + "| " + ipsName[x];
-        }
-        else
-        {
-            oledBuffer[x] = "-  | -";
+            previousMillis = currentMillis; // Znów resetujemy zegar
+            currentPhase = 2;               // Przejdź do Fazy 2
         }
     }
-    delay(100);
+
+    // --- FAZA 2: Wykonaj Ping/TCP po kolejnych 2 sekundach ---
+    else if (currentPhase == 2)
+    {
+        // Sprawdzamy, czy minęło 2000 ms od Fazy 1
+        if (currentMillis - previousMillis >= 2000)
+        {
+            if (ips[currentHostIndex] != IPAddress(0, 0, 0, 0))
+            {
+                bool ret = false;
+
+                // UWAGA: Funkcje Ping i Connect są tutaj jedynymi elementami naturalnie blokującymi procesor
+                // na czas oczekiwania na sieć. Z tym nic nie zrobimy bez pisania własnych bibliotek asynchronicznych.
+                if (ipsPort[currentHostIndex] == "")
+                {
+                    ret = Ping.ping(ips[currentHostIndex]);
+                }
+                else
+                {
+                    WiFiClient client;
+                    ret = client.connect(ips[currentHostIndex], ipsPort[currentHostIndex].toInt());
+                    client.stop();
+                }
+
+                if (ret == false)
+                {
+                    if (pingFailCounter[currentHostIndex] < 99)
+                    {
+                        pingFailCounter[currentHostIndex]++;
+                        if (pingFailCounter[currentHostIndex] == 5 || pingFailCounter[currentHostIndex] == 50 || pingFailCounter[currentHostIndex] == 99)
+                        {
+                            sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex].toString() + " - connection error! Attempt: " + String(pingFailCounter[currentHostIndex]));
+                        }
+                    }
+                }
+                else
+                {
+                    if (pingFailCounter[currentHostIndex] >= 5)
+                    {
+                        sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex].toString() + " - back online!");
+                    }
+                    pingFailCounter[currentHostIndex] = 0;
+                }
+
+                // Aktualizacja statusu dla następnego cyklu wyświetlania
+                if (pingFailCounter[currentHostIndex] == 0)
+                {
+                    status = "OK ";
+                }
+                else if (pingFailCounter[currentHostIndex] == 99)
+                {
+                    status = "OFF";
+                }
+                else
+                {
+                    status = String(pingFailCounter[currentHostIndex]);
+                    while (status.length() < 3)
+                    {
+                        status = status + " ";
+                    }
+                }
+                oledBuffer[currentHostIndex] = status + "| " + ipsName[currentHostIndex];
+            }
+            else
+            {
+                oledBuffer[currentHostIndex] = "-  | -";
+            }
+
+            // Krok końcowy: Przesuwamy się na kolejnego hosta i wracamy do Fazy 0
+            currentHostIndex++;
+            if (currentHostIndex >= 6)
+            {
+                currentHostIndex = 0; // Wracamy do początku tablicy
+
+                currentPhase = 3;   // Faza 3 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
+                countdownTimer = 5; // Ustawiamy timer na 5 cykli w kolejnej fazie
+                previousMillis = millis();
+            }
+            else
+            {
+                currentPhase = 0; // Wracamy do Fazy 0 dla kolejnego hosta
+            }
+        }
+    }
+    // --- FAZA 3: LCD MATRIX ---
+    else if (currentPhase == 3)
+    {
+        // Sprawdzamy, czy minęło 1000 ms
+        if (currentMillis - previousMillis >= 1000)
+        {
+            countdownTimer--;
+            previousMillis = currentMillis; // Znów resetujemy zegar
+            if (countdownTimer > 0)
+            {
+                updateOLED(String(countdownTimer), String(countdownTimer), String(countdownTimer),
+                           String(countdownTimer), String(countdownTimer), String(countdownTimer), String(countdownTimer), String(countdownTimer));
+            }
+            else
+            {
+                updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                           oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+                currentPhase = 0; // Przejdź do Fazy 0
+            }
+        }
+    }
 }

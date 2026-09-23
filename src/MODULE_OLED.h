@@ -1,5 +1,5 @@
-#ifndef OLED_H
-#define OLED_H
+#ifndef MODULE_OLED_H
+#define MODULE_OLED_H
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -54,4 +54,4 @@ void updateOLED(String line1, String line2, String line3, String line4, String l
   display.display(); // OLED update
 }
 
-#endif // OLED_H
+#endif // MODULE_OLED_H

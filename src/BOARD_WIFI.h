@@ -1,27 +1,34 @@
+#ifndef BOARD_WIFI_H
+#define BOARD_WIFI_H
+
 #include <ESP8266WiFi.h>
-#include <ESP8266HTTPClient.h>
 
+IPAddress local_IP(192, 168, 0, 199); // Adres ESP
+IPAddress gateway(192, 168, 0, 1);    // Brama (router)
+IPAddress subnet(255, 255, 255, 0);   // Maska
+IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google
 
-ESP8266WebServer server(80);
-
-
-
-void initAccessPoint(String accessPointName, String accessPointPassword)
+String initAccessPoint(String apName, String apPassword)
 {
     WiFi.mode(WIFI_AP);
-    WiFi.softAP(accessPointName, accessPointPassword);
+    WiFi.softAP(apName, apPassword);
 
-    Serial.print("AP IP: ");
-    Serial.println(WiFi.softAPIP());
+    String ipAddress = WiFi.softAPIP().toString();
 
-    server.on("/", HTTP_GET, handleRoot);
-    server.on("/save", HTTP_POST, handleSave);
+    Serial.print(F("AP Started. IP: "));
+    Serial.println(ipAddress);
 
-    server.begin();
-    updateOLED("CONFIG MODE", "Connected!!", "", "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config...", "", "");
+    return ipAddress;
 }
 
-void initWifiClient()
+void stopAccessPoint()
+{
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+    Serial.println(F("AP Stopped. Mode set to STA."));
+}
+
+bool initWifiClient(String ssid, String password)
 {
     WiFi.mode(WIFI_STA); // wifi - client mode
 
@@ -32,6 +39,7 @@ void initWifiClient()
 
     WiFi.begin(ssid.c_str(), password.c_str());
     Serial.print("\nConnecting to Wi-Fi");
+    Serial.print(ssid);
 
     int wifiTimeout = 0; // timeout counter
 
@@ -45,11 +53,41 @@ void initWifiClient()
         if (wifiTimeout > 30)
         {
             Serial.println("\nWiFi connection failed (Timeout). Rebooting...");
-            ESP.restart(); // Hard reset
+            return false;
         }
     }
 
     Serial.println("\nWiFi Connected:");
     Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
     Serial.println("RSSI: " + String(WiFi.RSSI()));
+    return true;
 }
+
+String wifiConnectionStatus()
+{
+    String status = "";
+    switch (WiFi.status())
+    {
+    case WL_CONNECTED:
+        status = "CONNECTED";
+        break;
+    case WL_NO_SSID_AVAIL:
+        status = "NO SSID";
+        break;
+    case WL_CONNECT_FAILED:
+        status = "CONN FAILED";
+        break;
+    case WL_CONNECTION_LOST:
+        status = "CONN LOST";
+        break;
+    case WL_DISCONNECTED:
+        status = "DISCONN";
+        break;
+    default:
+        status = "UNKNOWN";
+        break;
+    }
+    return status;
+}
+
+#endif // BOARD_WIFI_H

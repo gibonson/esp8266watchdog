@@ -1,6 +1,6 @@
 #include <ESP8266WebServer.h>
 
-
+ESP8266WebServer server(80);
 
 
 void handleRoot()
@@ -85,4 +85,13 @@ void handleSave()
 
     delay(1000);   // time to recieve 200
     ESP.restart(); // hard reset
+}
+
+
+void initWebGUI()
+{
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/save", HTTP_POST, handleSave);
+    server.begin();
+    Serial.println(F("Web GUI Started"));
 }

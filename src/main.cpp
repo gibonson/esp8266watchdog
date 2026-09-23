@@ -2,29 +2,22 @@
 #include <ESP8266Ping.h>
 #include <LittleFS.h>
 #include <WiFiClientSecure.h>
+#include <ESP8266HTTPClient.h>
 
-// #include <ESP8266WiFi.h>
-// #include <ESP8266HTTPClient.h>
-// #include <ESP8266WebServer.h>
 
 #include "MODULE_OLED.h"
 
 #include "BOARD_WIFI.h"
 #include "BOARD_WEB_GUI.h"
 
-
 #include "BOARD_JSON.h"
 #include "BOARD_PUSHOVER.h"
 
-String deviceName = "WatchDog v0.3";
+String deviceName = "WatchDog v0.4";
 
 // --- WI-FI Configuration---
 String ssid = "";
 String password = "";
-IPAddress local_IP(192, 168, 0, 199); // Adres ESP
-IPAddress gateway(192, 168, 0, 1);    // Brama (router)
-IPAddress subnet(255, 255, 255, 0);   // Maska
-IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google
 
 // --- PUSHOVER Configuration---
 String pushoverApiToken = "";
@@ -47,13 +40,11 @@ String ipsName[6] = {"", "", "", "", "", ""};
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String status = "  ";
-String wifiStatus = "";
 
 unsigned long previousMillis = 0; // Przechowuje czas ostatniej akcji
 int currentHostIndex = 0;         // Wskazuje, który z 6 hostów (0-5) aktualnie przetwarzamy
 int currentPhase = 0;             // Wskazuje krok (0 = pokaż nazwę, 1 = pokaż IP, 2 = pinguj)
 int countdownTimer = 0;           // Licznik koncowy
-
 
 const char *accessPointName = "ESP-Configuration";
 const char *accessPointPassword = "12345678";
@@ -135,8 +126,6 @@ void loadConfiguration()
     f.close();
 }
 
-
-
 void setup()
 {
 
@@ -147,7 +136,9 @@ void setup()
 
     LittleFS.begin();
     loadConfiguration();
-    initAccessPoint(accessPointName, accessPointPassword);
+    String apIP = initAccessPoint(accessPointName, accessPointPassword);
+    initWebGUI();
+    updateOLED("CONFIG MODE", "AP Started!", "", "Go to IP:", apIP, "Waiting for Config...", "", "");
 
     unsigned long apStartTime = millis();
     int lastSecondsLeft = -1;
@@ -187,10 +178,14 @@ void setup()
 
             yield();
     }
+
     server.stop();
     WiFi.softAPdisconnect(true);
 
-    initWifiClient();
+    if (!initWifiClient(ssid, password))
+    {
+        ESP.reset();
+    }
 
     initPushover(pushoverApiToken, pushoverUserKey, deviceName);
     sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
@@ -205,28 +200,8 @@ void loop()
 {
 
     unsigned long currentMillis = millis();
+    String wifiStatus = wifiConnectionStatus();
 
-    switch (WiFi.status())
-    {
-    case WL_CONNECTED:
-        wifiStatus = "CONNECTED";
-        break;
-    case WL_NO_SSID_AVAIL:
-        wifiStatus = "NO SSID";
-        break;
-    case WL_CONNECT_FAILED:
-        wifiStatus = "CONN FAILED";
-        break;
-    case WL_CONNECTION_LOST:
-        wifiStatus = "CONN LOST";
-        break;
-    case WL_DISCONNECTED:
-        wifiStatus = "DISCONN";
-        break;
-    default:
-        wifiStatus = "UNKNOWN";
-        break;
-    }
     if (currentPhase == 0)
     {
         oledBuffer[currentHostIndex] = "\x10  | " + ipsName[currentHostIndex];

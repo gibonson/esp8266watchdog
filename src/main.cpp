@@ -125,11 +125,11 @@ void loop()
         {
             if (ipsPort[currentHostIndex] == "")
             {
-                oledBuffer[currentHostIndex] = "\x10  |" + ips[currentHostIndex].toString();
+                oledBuffer[currentHostIndex] = "\x10  |" + ips[currentHostIndex];
             }
             else
             {
-                String adresPort = ips[currentHostIndex].toString() + ":" + ipsPort[currentHostIndex];
+                String adresPort = ips[currentHostIndex] + ":" + ipsPort[currentHostIndex];
                 oledBuffer[currentHostIndex] = "\x10  |" + adresPort.substring(0, 16);
             }
             updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
@@ -146,7 +146,7 @@ void loop()
         // Sprawdzamy, czy minęło 2000 ms od Fazy 1
         if (currentMillis - previousMillis >= 2000)
         {
-            if (ips[currentHostIndex] != IPAddress(0, 0, 0, 0))
+            if (ips[currentHostIndex] != "")
             {
                 bool ret = false;
 
@@ -154,7 +154,7 @@ void loop()
                 // na czas oczekiwania na sieć. Z tym nic nie zrobimy bez pisania własnych bibliotek asynchronicznych.
                 if (ipsPort[currentHostIndex] == "")
                 {
-                    ret = Ping.ping(ips[currentHostIndex]);
+                    ret = Ping.ping(ips[currentHostIndex].c_str());
                 }
                 else
                 {
@@ -170,7 +170,7 @@ void loop()
                         pingFailCounter[currentHostIndex]++;
                         if (pingFailCounter[currentHostIndex] == 5 || pingFailCounter[currentHostIndex] == 50 || pingFailCounter[currentHostIndex] == 99)
                         {
-                            sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex].toString() + " - connection error! Attempt: " + String(pingFailCounter[currentHostIndex]));
+                            sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - connection error! Attempt: " + String(pingFailCounter[currentHostIndex]));
                         }
                     }
                 }
@@ -178,7 +178,7 @@ void loop()
                 {
                     if (pingFailCounter[currentHostIndex] >= 5)
                     {
-                        sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex].toString() + " - back online!");
+                        sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - back online!");
                     }
                     pingFailCounter[currentHostIndex] = 0;
                 }

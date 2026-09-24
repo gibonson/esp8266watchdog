@@ -3,7 +3,7 @@
 
 #include <LittleFS.h>
 #include <ESP8266WiFi.h> // Wymagane dla typu IPAddress
-
+#include <ArduinoJson.h>
 
 // --- WI-FI Configuration---
 String ssid = "";
@@ -19,17 +19,33 @@ String pushoverUserKey = "";
 String serverJson = "";
 
 // --- Addresses to check ---
-IPAddress ips[6] = {
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0)};
-
+String ips[6] = {"", "", "", "", "", ""};
 String ipsPort[6] = {"", "", "", "", "", ""};
 String ipsName[6] = {"", "", "", "", "", ""};
 
+// --- Config template ---
+const String defaultJsonTemplate = "{\n"
+                  "  \"wifi\": {\n"
+                  "    \"ssid\": \"\",\n"
+                  "    \"password\": \"\",\n"
+                  "    \"localIp\": \"192.168.0.199\"\n"
+                  "  },\n"
+                  "  \"pushover\": {\n"
+                  "    \"userKey\": \"\",\n"
+                  "    \"apiToken\": \"\"\n"
+                  "  },\n"
+                  "  \"serverJson\": \"http://192.168.0.242:5000/api/addEvent\",\n"
+                  "  \"deviceList\": [\n"
+                  "    {\n"
+                  "      \"name\": \"Router\",\n"
+                  "      \"ip\": \"192.168.0.1\"\n"
+                  "    },\n"
+                  "    {\n"
+                  "      \"name\": \"Google DNS (Test)\",\n"
+                  "      \"ip\": \"8.8.8.8\"\n"
+                  "    }\n"
+                  "  ]\n"
+                  "}";
 
 bool stringToIP(const String &str, IPAddress &ip)
 {
@@ -44,93 +60,6 @@ void initLittleFS()
     }
 }
 
-void loadConfiguration()
-{
-    if (!LittleFS.exists("/config.txt"))
-        return;
-
-    File f = LittleFS.open("/config.txt", "r");
-    if (!f)
-        return;
-
-    String line;
-
-    ssid = f.readStringUntil('\n');
-    ssid.trim();
-
-    password = f.readStringUntil('\n');
-    password.trim();
-
-    line = f.readStringUntil('\n');
-    line.trim();
-    stringToIP(line, local_IP);
-
-    pushoverUserKey = f.readStringUntil('\n');
-    pushoverUserKey.trim();
-
-    pushoverApiToken = f.readStringUntil('\n');
-    pushoverApiToken.trim();
-
-    serverJson = f.readStringUntil('\n');
-    serverJson.trim();
-
-    for (int i = 0; i < 6; i++)
-    {
-        ips[i] = IPAddress(0, 0, 0, 0);
-        ipsPort[i] = "";
-        ipsName[i] = "-";
-        line = f.readStringUntil('\n');
-        line.trim();
-
-        if (line.length() > 0)
-        {
-            int separatorName = line.indexOf(';');
-
-            String address;
-
-            if (separatorName > 0)
-            {
-                address = line.substring(0, separatorName);
-                ipsName[i] = line.substring(separatorName + 1);
-            }
-            else
-            {
-                address = line;
-            }
-
-            int separatorPort = address.indexOf(':');
-
-            if (separatorPort > 0)
-            {
-                stringToIP(address.substring(0, separatorPort), ips[i]);
-                ipsPort[i] = address.substring(separatorPort + 1);
-            }
-            else
-            {
-                stringToIP(address, ips[i]);
-            }
-        }
-    }
-
-    f.close();
-}
-
-String readRawConfig()
-{
-    String content = "";
-    File f = LittleFS.open("/config.txt", "r");
-    if (f)
-    {
-        content = f.readString();
-        f.close();
-    }
-    else
-    {
-        content = "Nazwa_WiFi\nHaslo_WiFi\n192.168.0.199\nUserKey_Pushover\nApiToken_Pushover\nhttp://192.168.0.242:5000/api/addEvent\n192.168.0.10;Serwer\n192.168.0.11;Kamera\n\n\n\n\n";
-    }
-    return content;
-}
-
 bool saveRawConfig(const String &rawData)
 {
     File f = LittleFS.open("/config.txt", "w");
@@ -141,5 +70,93 @@ bool saveRawConfig(const String &rawData)
     f.close();
     return true; // Zapis udany
 }
+
+
+String readRawConfig()
+{
+    if (!LittleFS.exists("/config.json")) {
+        Serial.println(F("Brak pliku /config.json - ładuję szablon."));
+        saveRawConfig(defaultJsonTemplate); // <--- Zapis szablonu do LittleFS
+        return defaultJsonTemplate;
+    }
+
+    String content = "";
+    File f = LittleFS.open("/config.json", "r");
+    if (f)
+    {
+        content = f.readString();
+        f.close();
+    }
+
+    DynamicJsonDocument testDoc(1024);
+    DeserializationError error = deserializeJson(testDoc, content);
+    
+    if (error || content.length() == 0) {
+        Serial.println(F("Plik config.json jest uszkodzony lub pusty. Zwracam szablon."));
+        saveRawConfig(defaultJsonTemplate); // <--- Zapis szablonu do LittleFS
+        return defaultJsonTemplate;
+    }
+
+    return content; // Jeśli wszystko jest OK, zwracamy zawartość pliku
+}
+
+void loadConfiguration()
+{
+    // ZMIANA 3: loadConfiguration nie dotyka LittleFS, prosi o dane funkcję readRawConfig()
+    String rawConfig = readRawConfig();
+
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, rawConfig);
+
+    if (error) {
+        // Ten błąd praktycznie nie powinien się zdarzyć (bo readRawConfig go już odrzuca), ale zostawiamy dla bezpieczeństwa
+        Serial.print(F("Błąd parsowania JSON w loadConfiguration: "));
+        Serial.println(error.c_str());
+        return;
+    }
+
+    // Odczyt sekcji WiFi
+    ssid = doc["wifi"]["ssid"] | "";
+    password = doc["wifi"]["password"] | "";
+    String ipStr = doc["wifi"]["localIp"] | "";
+    if (ipStr != "") stringToIP(ipStr, local_IP);
+
+    // Odczyt sekcji Pushover
+    pushoverUserKey = doc["pushover"]["userKey"] | "";
+    pushoverApiToken = doc["pushover"]["apiToken"] | "";
+
+    // Odczyt Endpointu
+    serverJson = doc["serverJson"] | "";
+
+    // Odczyt tablicy hostów (deviceList)
+    JsonArray deviceList = doc["deviceList"].as<JsonArray>();
+    
+    int i = 0;
+    for (JsonObject device : deviceList) 
+    {
+        if (i >= 6) break; 
+        
+        ipsName[i] = device["name"] | "-";
+        
+        // ZMIANA 1: Zapisujemy tekst bezpośrednio, bez stringToIP
+        ips[i] = device["ip"] | ""; 
+        ipsPort[i] = device["port"] | ""; 
+        
+        i++;
+    }
+    
+    // Czyszczenie "resztek" w tablicy
+    for (int j = i; j < 6; j++) {
+        ips[j] = "";
+        ipsName[j] = "-";
+        ipsPort[j] = "";
+    }
+
+    Serial.println(F("Konfiguracja zaktualizowana i załadowana do zmiennych!"));
+}
+
+
+
+
 
 #endif // BOARD_CONFIG_H

@@ -11,7 +11,7 @@
 #include "BOARD_JSON.h"
 #include "BOARD_PUSHOVER.h"
 
-String deviceName = "WatchDog v0.4";
+String deviceName = "WatchDog v0.5";
 
 
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
@@ -26,8 +26,6 @@ int countdownTimer = 0;           // Licznik koncowy
 const char *accessPointName = "ESP-Configuration";
 const char *accessPointPassword = "12345678";
 bool configSaved = false;
-
-
 
 
 void setup()
@@ -99,7 +97,7 @@ void setup()
     initJson(serverJson, deviceName);
     sendJson("String addInfo", 666, "String type", "String requestID");
 
-    updateOLED("ESP8266", "watchdog v0.3", "\x10", "", "\x07", "", "", "");
+    updateOLED("ESP8266", "watchdog v0.5", "\x10", "", "\x07", "", "", "");
 }
 
 void loop()
@@ -213,7 +211,7 @@ void loop()
             {
                 currentHostIndex = 0; // Wracamy do początku tablicy
 
-                currentPhase = 2;   // Faza 3 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
+                currentPhase = 2;   // Faza 2 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
                 countdownTimer = 5; // Ustawiamy timer na 5 cykli w kolejnej fazie
                 previousMillis = millis();
             }

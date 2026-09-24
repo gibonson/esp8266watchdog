@@ -57,7 +57,7 @@ bool initWifiClient(String ssid, String password)
     }
 
     Serial.println("\nWiFi Connected:");
-    Serial.println("Adres IP: " + String(WiFi.localIP().toString()));
+    Serial.println("Adres IP: " + WiFi.localIP().toString());
     Serial.println("RSSI: " + String(WiFi.RSSI()));
     return true;
 }

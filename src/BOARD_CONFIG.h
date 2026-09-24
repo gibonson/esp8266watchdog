@@ -62,7 +62,7 @@ void initLittleFS()
 
 bool saveRawConfig(const String &rawData)
 {
-    File f = LittleFS.open("/config.txt", "w");
+    File f = LittleFS.open("/config.json", "w");
     if (!f)
         return false; // Zwracamy false jeśli błąd zapisu
 

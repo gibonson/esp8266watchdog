@@ -1,22 +1,14 @@
+#ifndef BOARD_WEB_GUI_H
+#define BOARD_WEB_GUI_H
+
+
 #include <ESP8266WebServer.h>
 
 ESP8266WebServer server(80);
 
-
 void handleRoot()
 {
-    String configContent = "";
-    File f = LittleFS.open("/config.txt", "r");
-    if (f)
-    {
-        configContent = f.readString();
-        f.close();
-    }
-    else
-    {
-        // if no file create template
-        configContent = "Nazwa_WiFi\nHaslo_WiFi\n192.168.0.199\nUserKey_Pushover\nApiToken_Pushover\nhttp://192.168.0.242:5000/api/addEvent\n192.168.0.10;Serwer\n192.168.0.11;Kamera\n\n\n\n\n";
-    }
+    String configContent = readRawConfig(); // Pytamy moduł konfiguracyjny o tekst
 
     String html = R"rawliteral(
 <!DOCTYPE html>
@@ -70,23 +62,17 @@ void handleSave()
         return;
     }
 
-    File f = LittleFS.open("/config.txt", "w");
-    if (!f)
+    if (!saveRawConfig(server.arg("configRaw")))
     {
         server.send(500, "text/plain", "Error saving to flash memory");
         return;
     }
-
-    // save data from configRaw to config.txt
-    f.print(server.arg("configRaw"));
-    f.close();
 
     server.send(200, "text/html", "<h2>Configuration saved! ESP will reboot now.</h2>");
 
     delay(1000);   // time to recieve 200
     ESP.restart(); // hard reset
 }
-
 
 void initWebGUI()
 {
@@ -95,3 +81,5 @@ void initWebGUI()
     server.begin();
     Serial.println(F("Web GUI Started"));
 }
+
+#endif //BOARD_WEB_GUI_H

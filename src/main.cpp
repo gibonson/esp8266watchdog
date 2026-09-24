@@ -1,45 +1,22 @@
 #include <Arduino.h>
 #include <ESP8266Ping.h>
-#include <LittleFS.h>
 #include <WiFiClientSecure.h>
 #include <ESP8266HTTPClient.h>
 
-
 #include "MODULE_OLED.h"
 
+#include "BOARD_CONFIG.h"
 #include "BOARD_WIFI.h"
 #include "BOARD_WEB_GUI.h"
-
 #include "BOARD_JSON.h"
 #include "BOARD_PUSHOVER.h"
 
 String deviceName = "WatchDog v0.4";
 
-// --- WI-FI Configuration---
-String ssid = "";
-String password = "";
 
-// --- PUSHOVER Configuration---
-String pushoverApiToken = "";
-String pushoverUserKey = "";
-
-// --- JSON Configuration---
-String serverJson = "";
-
-// --- Addresses to check ---
-IPAddress ips[6] = {
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0),
-    IPAddress(0, 0, 0, 0)};
-
-String ipsPort[6] = {"", "", "", "", "", ""};
-String ipsName[6] = {"", "", "", "", "", ""};
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
-String status = "  ";
+String iPstatus = "  ";
 
 unsigned long previousMillis = 0; // Przechowuje czas ostatniej akcji
 int currentHostIndex = 0;         // Wskazuje, który z 6 hostów (0-5) aktualnie przetwarzamy
@@ -50,81 +27,8 @@ const char *accessPointName = "ESP-Configuration";
 const char *accessPointPassword = "12345678";
 bool configSaved = false;
 
-bool stringToIP(const String &str, IPAddress &ip)
-{
-    return ip.fromString(str);
-}
 
-void loadConfiguration()
-{
-    if (!LittleFS.exists("/config.txt"))
-        return;
 
-    File f = LittleFS.open("/config.txt", "r");
-    if (!f)
-        return;
-
-    String line;
-
-    ssid = f.readStringUntil('\n');
-    ssid.trim();
-
-    password = f.readStringUntil('\n');
-    password.trim();
-
-    line = f.readStringUntil('\n');
-    line.trim();
-    stringToIP(line, local_IP);
-
-    pushoverUserKey = f.readStringUntil('\n');
-    pushoverUserKey.trim();
-
-    pushoverApiToken = f.readStringUntil('\n');
-    pushoverApiToken.trim();
-
-    serverJson = f.readStringUntil('\n');
-    serverJson.trim();
-
-    for (int i = 0; i < 6; i++)
-    {
-        ips[i] = IPAddress(0, 0, 0, 0);
-        ipsPort[i] = "";
-        ipsName[i] = "-";
-        line = f.readStringUntil('\n');
-        line.trim();
-
-        if (line.length() > 0)
-        {
-            int separatorName = line.indexOf(';');
-
-            String address;
-
-            if (separatorName > 0)
-            {
-                address = line.substring(0, separatorName);
-                ipsName[i] = line.substring(separatorName + 1);
-            }
-            else
-            {
-                address = line;
-            }
-
-            int separatorPort = address.indexOf(':');
-
-            if (separatorPort > 0)
-            {
-                stringToIP(address.substring(0, separatorPort), ips[i]);
-                ipsPort[i] = address.substring(separatorPort + 1);
-            }
-            else
-            {
-                stringToIP(address, ips[i]);
-            }
-        }
-    }
-
-    f.close();
-}
 
 void setup()
 {
@@ -134,8 +38,10 @@ void setup()
     updateOLED(deviceName, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
     delay(3000);
 
-    LittleFS.begin();
+    initLittleFS();
+
     loadConfiguration();
+
     String apIP = initAccessPoint(accessPointName, accessPointPassword);
     initWebGUI();
     updateOLED("CONFIG MODE", "AP Started!", "", "Go to IP:", apIP, "Waiting for Config...", "", "");
@@ -170,7 +76,7 @@ void setup()
 
             if (secondsLeft <= 0)
             {
-                Serial.println("o clients. Starting normally.");
+                Serial.println("no clients. Starting normally.");
                 break; // Czas minął, wychodzimy z pętli i ruszamy z kodem dalej
             }
         }
@@ -280,21 +186,21 @@ void loop()
                 // Aktualizacja statusu dla następnego cyklu wyświetlania
                 if (pingFailCounter[currentHostIndex] == 0)
                 {
-                    status = "OK ";
+                    iPstatus = "OK ";
                 }
                 else if (pingFailCounter[currentHostIndex] == 99)
                 {
-                    status = "OFF";
+                    iPstatus = "OFF";
                 }
                 else
                 {
-                    status = String(pingFailCounter[currentHostIndex]);
-                    while (status.length() < 3)
+                    iPstatus = String(pingFailCounter[currentHostIndex]);
+                    while (iPstatus.length() < 3)
                     {
-                        status = status + " ";
+                        iPstatus = iPstatus + " ";
                     }
                 }
-                oledBuffer[currentHostIndex] = status + "| " + ipsName[currentHostIndex];
+                oledBuffer[currentHostIndex] = iPstatus + "| " + ipsName[currentHostIndex];
             }
             else
             {
@@ -307,34 +213,13 @@ void loop()
             {
                 currentHostIndex = 0; // Wracamy do początku tablicy
 
-                currentPhase = 3;   // Faza 3 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
+                currentPhase = 2;   // Faza 3 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
                 countdownTimer = 5; // Ustawiamy timer na 5 cykli w kolejnej fazie
                 previousMillis = millis();
             }
             else
             {
                 currentPhase = 0; // Wracamy do Fazy 0 dla kolejnego hosta
-            }
-        }
-    }
-    // --- FAZA 3: LCD MATRIX ---
-    else if (currentPhase == 3)
-    {
-        // Sprawdzamy, czy minęło 1000 ms
-        if (currentMillis - previousMillis >= 1000)
-        {
-            countdownTimer--;
-            previousMillis = currentMillis; // Znów resetujemy zegar
-            if (countdownTimer > 0)
-            {
-                updateOLED(String(countdownTimer), String(countdownTimer), String(countdownTimer),
-                           String(countdownTimer), String(countdownTimer), String(countdownTimer), String(countdownTimer), String(countdownTimer));
-            }
-            else
-            {
-                updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
-                           oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-                currentPhase = 0; // Przejdź do Fazy 0
             }
         }
     }

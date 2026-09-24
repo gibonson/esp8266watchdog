@@ -3,7 +3,6 @@
 
 #include <ESP8266WiFi.h>
 
-IPAddress local_IP(192, 168, 0, 199); // Adres ESP
 IPAddress gateway(192, 168, 0, 1);    // Brama (router)
 IPAddress subnet(255, 255, 255, 0);   // Maska
 IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google

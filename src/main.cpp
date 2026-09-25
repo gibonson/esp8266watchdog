@@ -13,7 +13,6 @@
 
 String deviceName = "WatchDog v0.5";
 
-
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String iPstatus = "  ";
@@ -21,12 +20,10 @@ String iPstatus = "  ";
 unsigned long previousMillis = 0; // Przechowuje czas ostatniej akcji
 int currentHostIndex = 0;         // Wskazuje, który z 6 hostów (0-5) aktualnie przetwarzamy
 int currentPhase = 0;             // Wskazuje krok (0 = pokaż nazwę, 1 = pokaż IP, 2 = pinguj)
-int countdownTimer = 0;           // Licznik koncowy
 
 const char *accessPointName = "ESP-Configuration";
 const char *accessPointPassword = "12345678";
 bool configSaved = false;
-
 
 void setup()
 {
@@ -37,7 +34,6 @@ void setup()
     delay(3000);
 
     initLittleFS();
-
     loadConfiguration();
 
     String apIP = initAccessPoint(accessPointName, accessPointPassword);
@@ -55,9 +51,8 @@ void setup()
 
         int clients = WiFi.softAPgetStationNum();
 
-        if (clients > 0)
+        if (clients > 0) // Ktoś się podłączył! Trwale wyłączamy odliczanie.
         {
-            // Ktoś się podłączył! Trwale wyłączamy odliczanie.
             timerActive = false;
             updateOLED("CONFIG MODE", "", "AP: " + String(accessPointName), "PASS: " + String(accessPointPassword), "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config", "");
         }
@@ -96,129 +91,95 @@ void setup()
 
     initJson(serverJson, deviceName);
     sendJson("String addInfo", 666, "String type", "String requestID");
-
-    updateOLED("ESP8266", "watchdog v0.5", "\x10", "", "\x07", "", "", "");
 }
 
 void loop()
 {
-
     unsigned long currentMillis = millis();
     String wifiStatus = wifiConnectionStatus();
 
     if (currentPhase == 0)
     {
-        oledBuffer[currentHostIndex] = "\x10  | " + ipsName[currentHostIndex];
-        updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
-                   oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
-
-        previousMillis = currentMillis; // Zapisz czas
-        currentPhase = 1;               // Przejdź do Fazy 1
-    }
-
-    else if (currentPhase == 1)
-    {
-        // Sprawdzamy, czy minęło już 2000 ms od Fazy 0
-        if (currentMillis - previousMillis >= 2000)
+        if (ips[currentHostIndex] == "")
         {
+            oledBuffer[currentHostIndex] = "-  | ---";
+            updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                       oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+        }
+        else
+        {
+            bool ret = false;
             if (ipsPort[currentHostIndex] == "")
             {
                 oledBuffer[currentHostIndex] = "\x10  |" + ips[currentHostIndex];
+                updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                           oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+                ret = Ping.ping(ips[currentHostIndex].c_str());
             }
             else
             {
-                String adresPort = ips[currentHostIndex] + ":" + ipsPort[currentHostIndex];
-                oledBuffer[currentHostIndex] = "\x10  |" + adresPort.substring(0, 16);
+                oledBuffer[currentHostIndex] = ("\x10  |" + ips[currentHostIndex] + ":" + ipsPort[currentHostIndex]).substring(0, 22);
+                updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                           oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+                WiFiClient client;
+                ret = client.connect(ips[currentHostIndex], ipsPort[currentHostIndex].toInt());
+                client.stop();
             }
-            updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
-                       oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
 
-            previousMillis = currentMillis; // Znów resetujemy zegar
-            currentPhase = 2;               // Przejdź do Fazy 2
-        }
-    }
-
-    // --- FAZA 2: Wykonaj Ping/TCP po kolejnych 2 sekundach ---
-    else if (currentPhase == 2)
-    {
-        // Sprawdzamy, czy minęło 2000 ms od Fazy 1
-        if (currentMillis - previousMillis >= 2000)
-        {
-            if (ips[currentHostIndex] != "")
+            if (ret == false)
             {
-                bool ret = false;
-
-                // UWAGA: Funkcje Ping i Connect są tutaj jedynymi elementami naturalnie blokującymi procesor
-                // na czas oczekiwania na sieć. Z tym nic nie zrobimy bez pisania własnych bibliotek asynchronicznych.
-                if (ipsPort[currentHostIndex] == "")
+                if (pingFailCounter[currentHostIndex] < 99)
                 {
-                    ret = Ping.ping(ips[currentHostIndex].c_str());
-                }
-                else
-                {
-                    WiFiClient client;
-                    ret = client.connect(ips[currentHostIndex], ipsPort[currentHostIndex].toInt());
-                    client.stop();
-                }
-
-                if (ret == false)
-                {
-                    if (pingFailCounter[currentHostIndex] < 99)
-                    {
-                        pingFailCounter[currentHostIndex]++;
-                        if (pingFailCounter[currentHostIndex] == 5 || pingFailCounter[currentHostIndex] == 50 || pingFailCounter[currentHostIndex] == 99)
-                        {
-                            sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - connection error! Attempt: " + String(pingFailCounter[currentHostIndex]));
-                        }
-                    }
-                }
-                else
-                {
-                    if (pingFailCounter[currentHostIndex] >= 5)
-                    {
-                        sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - back online!");
-                    }
-                    pingFailCounter[currentHostIndex] = 0;
-                }
-
-                // Aktualizacja statusu dla następnego cyklu wyświetlania
-                if (pingFailCounter[currentHostIndex] == 0)
-                {
-                    iPstatus = "OK ";
-                }
-                else if (pingFailCounter[currentHostIndex] == 99)
-                {
-                    iPstatus = "OFF";
-                }
-                else
-                {
+                    pingFailCounter[currentHostIndex]++;
                     iPstatus = String(pingFailCounter[currentHostIndex]);
                     while (iPstatus.length() < 3)
                     {
                         iPstatus = iPstatus + " ";
                     }
                 }
-                oledBuffer[currentHostIndex] = iPstatus + "| " + ipsName[currentHostIndex];
+                else
+                {
+                    iPstatus = "OFF";
+                }
+                if (pingFailCounter[currentHostIndex] == 5 || pingFailCounter[currentHostIndex] == 50 || pingFailCounter[currentHostIndex] == 99)
+                {
+                    sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - connection error! Attempt: " + String(pingFailCounter[currentHostIndex]));
+                }
             }
             else
             {
-                oledBuffer[currentHostIndex] = "-  | -";
+                iPstatus = "OK ";
+                if (pingFailCounter[currentHostIndex] >= 5)
+                {
+                    sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - back online!");
+                }
+                pingFailCounter[currentHostIndex] = 0;
             }
+            oledBuffer[currentHostIndex] = iPstatus + "|" + ipsName[currentHostIndex];
+        }
+        currentPhase = 1;
+    }
 
-            // Krok końcowy: Przesuwamy się na kolejnego hosta i wracamy do Fazy 0
+    else if (currentPhase == 1)
+    {
+        if (currentMillis - previousMillis >= 4000)
+        {
+            updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
+                       oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
+            previousMillis = currentMillis;
+            currentPhase = 2;
+        }
+    }
+
+    else if (currentPhase == 2)
+    {
+        if (currentMillis - previousMillis >= 4000)
+        {
             currentHostIndex++;
             if (currentHostIndex >= 6)
-            {
-                currentHostIndex = 0; // Wracamy do początku tablicy
-
-                currentPhase = 2;   // Faza 2 wykona się od razu w następnym przebiegu loop() i sama ustawi zegar
-                countdownTimer = 5; // Ustawiamy timer na 5 cykli w kolejnej fazie
-                previousMillis = millis();
-            }
-            else
-            {
-                currentPhase = 0; // Wracamy do Fazy 0 dla kolejnego hosta
-            }
+                currentHostIndex = 0;
+            previousMillis = millis();
+            currentPhase = 0;
         }
     }
 }

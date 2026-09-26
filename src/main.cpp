@@ -8,10 +8,12 @@
 #include "BOARD_CONFIG.h"
 #include "BOARD_WIFI.h"
 #include "BOARD_WEB_GUI.h"
+#include "BOARD_OTA.h"
 #include "BOARD_JSON.h"
 #include "BOARD_PUSHOVER.h"
 
-String deviceName = "WatchDog v0.6";
+String deviceName = "ESP-WatchDog";
+String appVersion = "0.9";
 
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
@@ -30,7 +32,7 @@ void setup()
 
     Serial.begin(115200);
     initOLED();
-    updateOLED(deviceName, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
+    updateOLED(deviceName + " " + appVersion, "", "  (co tu sie      )", "   \\  odpierdala_/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
     delay(3000);
 
     initLittleFS();
@@ -79,13 +81,23 @@ void setup()
     server.stop();
     WiFi.softAPdisconnect(true);
 
+    updateOLED("SSID: " + String(ssid), "", "  (Connecting to  )", "   \\  the WIFI  _/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
+
     initWifiClient(ssid, password);
 
-    initPushover(pushoverApiToken, pushoverUserKey, deviceName);
-    sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");
+    updateOLED("SSID: " + String(ssid), "", "  (Okay, I\'m .    )", "   \\  ONLINE!!  _/", "    \\/", "     |\\__/,|   ( \\", "   _.|o o  |_   ) )", " -(((---(((--------");
+    initPushover(pushoverApiToken, pushoverUserKey, deviceName + " " + appVersion);
+    sendPushover("Watchdog has just started its watch.");
 
     initJson(serverJson, deviceName);
     sendJson("String addInfo", 666, "String type", "String requestID");
+
+    updateOLED("SSID: " + String(ssid), "FIRMWARE UPDATE", "Version: " + appVersion, "OTA Server:", serverOtaVersion.substring(0, 20), "Status:", "...", "");
+    delay(3000);
+
+    String otaStatus = checkForUpdates(serverOtaVersion, appVersion);
+    updateOLED("SSID: " + String(ssid), "FIRMWARE UPDATE", "Version: " + appVersion, "OTA Server:", serverOtaVersion.substring(0, 20), "Status:", otaStatus, "");
+    delay(3000);
 }
 
 void loop()

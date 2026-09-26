@@ -17,6 +17,10 @@ String pushoverUserKey = "";
 // --- JSON Configuration---
 String serverJson = "";
 
+// --- OTA Configuration---
+String serverOtaVersion = "";
+
+
 // --- Addresses to check ---
 String ips[6] = {"", "", "", "", "", ""};
 String ipsPort[6] = {"", "", "", "", "", ""};
@@ -34,6 +38,7 @@ const String defaultJsonTemplate = "{\n"
                                    "    \"apiToken\": \"\"\n"
                                    "  },\n"
                                    "  \"serverJson\": \"http://192.168.0.242:5000/api/addEvent\",\n"
+                                   "  \"serverOtaVersion\": \"\",\n"
                                    "  \"deviceList\": [\n"
                                    "    {\n"
                                    "      \"name\": \"Router\",\n"
@@ -123,6 +128,7 @@ void loadConfiguration()
     pushoverApiToken = doc["pushover"]["apiToken"] | "";
 
     serverJson = doc["serverJson"] | "";
+    serverOtaVersion = doc["serverOtaVersion"] | "";
 
     JsonArray deviceList = doc["deviceList"].as<JsonArray>();
 

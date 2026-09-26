@@ -3,20 +3,17 @@
 
 #include <ESP8266WiFi.h>
 
-IPAddress gateway(192, 168, 0, 1);    // Brama (router)
-IPAddress subnet(255, 255, 255, 0);   // Maska
-IPAddress primaryDNS(8, 8, 8, 8);     // Serwer DNS od Google
+IPAddress gateway(192, 168, 0, 1); // Router
+IPAddress subnet(255, 255, 255, 0);
+IPAddress primaryDNS(8, 8, 8, 8);
 
 String initAccessPoint(String apName, String apPassword)
 {
     WiFi.mode(WIFI_AP);
     WiFi.softAP(apName, apPassword);
-
     String ipAddress = WiFi.softAPIP().toString();
-
     Serial.print(F("AP Started. IP: "));
     Serial.println(ipAddress);
-
     return ipAddress;
 }
 
@@ -27,7 +24,7 @@ void stopAccessPoint()
     Serial.println(F("AP Stopped. Mode set to STA."));
 }
 
-bool initWifiClient(String ssid, String password)
+void initWifiClient(String ssid, String password)
 {
     WiFi.mode(WIFI_STA); // wifi - client mode
 
@@ -48,18 +45,16 @@ bool initWifiClient(String ssid, String password)
         Serial.print(".");
         wifiTimeout++;
 
-        // Jeśli minęło 30 prób (30 * 500ms = 15 sekund)
-        if (wifiTimeout > 30)
+        if (wifiTimeout > 30) // restart after 15s (30 * 500ms)
         {
             Serial.println("\nWiFi connection failed (Timeout). Rebooting...");
-            return false;
+            ESP.reset();
         }
     }
 
     Serial.println("\nWiFi Connected:");
     Serial.println("Adres IP: " + WiFi.localIP().toString());
     Serial.println("RSSI: " + String(WiFi.RSSI()));
-    return true;
 }
 
 String wifiConnectionStatus()

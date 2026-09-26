@@ -17,9 +17,9 @@ int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
 String iPstatus = "  ";
 
-unsigned long previousMillis = 0; // Przechowuje czas ostatniej akcji
-int currentHostIndex = 0;         // Wskazuje, który z 6 hostów (0-5) aktualnie przetwarzamy
-int currentPhase = 0;             // Wskazuje krok (0 = pokaż nazwę, 1 = pokaż IP, 2 = pinguj)
+unsigned long previousMillis = 0;
+int currentHostIndex = 0;
+int currentPhase = 0;
 
 const char *accessPointName = "ESP-Configuration";
 const char *accessPointPassword = "12345678";
@@ -40,25 +40,24 @@ void setup()
     initWebGUI();
     updateOLED("CONFIG MODE", "AP Started!", "", "Go to IP:", apIP, "Waiting for Config...", "", "");
 
+    // Configuration Mode
     unsigned long apStartTime = millis();
     int lastSecondsLeft = -1;
-    bool timerActive = true; // Flaga określająca, czy licznik jest włączony
+    bool timerActive = true;
 
-    // Configuration Mode
     while (!configSaved)
     {
-        server.handleClient(); // Obsługa zapytań HTTP
+        server.handleClient();
 
         int clients = WiFi.softAPgetStationNum();
 
-        if (clients > 0) // Ktoś się podłączył! Trwale wyłączamy odliczanie.
+        if (clients > 0) // if client deactivate timer
         {
             timerActive = false;
             updateOLED("CONFIG MODE", "", "AP: " + String(accessPointName), "PASS: " + String(accessPointPassword), "Go to IP:", WiFi.softAPIP().toString(), "Waitig for Config", "");
         }
         else if (timerActive)
         {
-            // Brak klientów i licznik jest włączony - odliczamy 10 sekund
             int secondsLeft = 10 - ((millis() - apStartTime) / 1000);
 
             if (secondsLeft != lastSecondsLeft)
@@ -66,11 +65,10 @@ void setup()
                 updateOLED("CONFIG MODE", "", "AP: " + String(accessPointName), "PASS: " + String(accessPointPassword), "", "Waiting for client", "Starting in: " + String(secondsLeft) + "s", "");
                 lastSecondsLeft = secondsLeft;
             }
-
             if (secondsLeft <= 0)
             {
                 Serial.println("no clients. Starting normally.");
-                break; // Czas minął, wychodzimy z pętli i ruszamy z kodem dalej
+                break;
             }
         }
         else
@@ -81,10 +79,7 @@ void setup()
     server.stop();
     WiFi.softAPdisconnect(true);
 
-    if (!initWifiClient(ssid, password))
-    {
-        ESP.reset();
-    }
+    initWifiClient(ssid, password);
 
     initPushover(pushoverApiToken, pushoverUserKey, deviceName);
     sendPushover("Hello!! " + ssid + " - Watchdog has just started its watch.");

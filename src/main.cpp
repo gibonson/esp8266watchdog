@@ -17,7 +17,6 @@ String appVersion = "0.9";
 
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
-String iPstatus = "  ";
 
 unsigned long previousMillis = 0;
 int currentHostIndex = 0;
@@ -103,10 +102,10 @@ void setup()
 void loop()
 {
     unsigned long currentMillis = millis();
-    String wifiStatus = wifiConnectionStatus();
 
     if (currentPhase == 0)
     {
+        String wifiStatus = wifiConnectionStatus();
         if (ips[currentHostIndex] == "")
         {
             oledBuffer[currentHostIndex] = "-  | ---";
@@ -116,6 +115,8 @@ void loop()
         else
         {
             bool ret = false;
+            String IPstatus = "  ";
+
             if (ipsPort[currentHostIndex] == "")
             {
                 oledBuffer[currentHostIndex] = "\x10  |" + ips[currentHostIndex];
@@ -138,15 +139,15 @@ void loop()
                 if (pingFailCounter[currentHostIndex] < 99)
                 {
                     pingFailCounter[currentHostIndex]++;
-                    iPstatus = String(pingFailCounter[currentHostIndex]);
-                    while (iPstatus.length() < 3)
+                    IPstatus = String(pingFailCounter[currentHostIndex]);
+                    while (IPstatus.length() < 3)
                     {
-                        iPstatus = iPstatus + " ";
+                        IPstatus = IPstatus + " ";
                     }
                 }
                 else
                 {
-                    iPstatus = "OFF";
+                    IPstatus = "OFF";
                 }
                 if (pingFailCounter[currentHostIndex] == 5 || pingFailCounter[currentHostIndex] == 50 || pingFailCounter[currentHostIndex] == 99)
                 {
@@ -155,14 +156,14 @@ void loop()
             }
             else
             {
-                iPstatus = "OK ";
+                IPstatus = "OK ";
                 if (pingFailCounter[currentHostIndex] >= 5)
                 {
                     sendPushover(ipsName[currentHostIndex] + " - " + ips[currentHostIndex] + " - back online!");
                 }
                 pingFailCounter[currentHostIndex] = 0;
             }
-            oledBuffer[currentHostIndex] = iPstatus + "|" + ipsName[currentHostIndex];
+            oledBuffer[currentHostIndex] = IPstatus + "|" + ipsName[currentHostIndex];
         }
         currentPhase = 1;
     }
@@ -171,6 +172,7 @@ void loop()
     {
         if (currentMillis - previousMillis >= 4000)
         {
+            String wifiStatus = wifiConnectionStatus();
             updateOLED("SSID: " + String(ssid), wifiStatus + " dBm=" + String(WiFi.RSSI()),
                        oledBuffer[0], oledBuffer[1], oledBuffer[2], oledBuffer[3], oledBuffer[4], oledBuffer[5]);
             previousMillis = currentMillis;

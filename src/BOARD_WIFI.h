@@ -48,7 +48,7 @@ void initWifiClient(String ssid, String password)
         if (wifiTimeout > 30) // restart after 15s (30 * 500ms)
         {
             Serial.println("\nWiFi connection failed (Timeout). Rebooting...");
-            ESP.reset();
+            ESP.restart();
         }
     }
 

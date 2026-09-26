@@ -11,7 +11,7 @@
 #include "BOARD_JSON.h"
 #include "BOARD_PUSHOVER.h"
 
-String deviceName = "WatchDog v0.5";
+String deviceName = "WatchDog v0.6";
 
 int pingFailCounter[6] = {0, 0, 0, 0, 0, 0};
 String oledBuffer[7] = {"", "", "", "", "", "", ""};
